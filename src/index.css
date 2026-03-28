@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Leaflet map fix */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+/* FullCalendar overrides */
+.fc {
+  font-family: inherit;
+}
+
+.fc-toolbar-title {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+}
+
+.fc-button {
+  background-color: #169B62 !important;
+  border-color: #169B62 !important;
+}
+
+.fc-button:hover {
+  background-color: #0f7a4d !important;
+  border-color: #0f7a4d !important;
+}
+
+.fc-button-active {
+  background-color: #0f7a4d !important;
+}
+
+.fc-event {
+  cursor: pointer;
+  border-radius: 4px !important;
+}
+
+.fc-day-today {
+  background-color: rgba(22, 155, 98, 0.08) !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #169B62;
+  border-radius: 3px;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Pulse animation for online indicator */
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-green {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+/* Route line animation */
+@keyframes dash {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Avatar ring */
+.avatar-online::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: #22c55e;
+  border-radius: 50%;
+  border: 2px solid white;
+}
