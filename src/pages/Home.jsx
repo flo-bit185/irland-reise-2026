@@ -1,81 +1,64 @@
 import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 
-// Fix Leaflet default icons
+// Fix Leaflet default icon paths
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// Ireland route waypoints
 const ROUTE = [
-  { name: 'Dublin', lat: 53.3498, lng: -6.2603, emoji: '🏙️', desc: 'Start der Reise – Hauptstadt Irlands' },
-  { name: 'Cliffs of Moher', lat: 52.9715, lng: -9.4309, emoji: '🏔️', desc: 'Dramatische 200m hohe Klippen' },
-  { name: 'Galway', lat: 53.2707, lng: -9.0568, emoji: '🎵', desc: 'Bunte Stadt mit lebhafter Musikszene' },
-  { name: 'Ring of Kerry', lat: 51.9680, lng: -9.9357, emoji: '🌊', desc: 'Spektakuläre Küstenstraße' },
-  { name: 'Killarney', lat: 52.0599, lng: -9.5044, emoji: '🏞️', desc: 'Nationalpark & Endziel' },
+  { name: 'Dublin',          lat: 53.3498, lng: -6.2603,  emoji: '🏙️', desc: 'Start – Hauptstadt Irlands' },
+  { name: 'Cliffs of Moher', lat: 52.9715, lng: -9.4309,  emoji: '🏔️', desc: '200m hohe Klippen am Atlantik' },
+  { name: 'Galway',          lat: 53.2707, lng: -9.0568,  emoji: '🎵', desc: 'Bunte Stadt mit Musikszene' },
+  { name: 'Ring of Kerry',   lat: 51.9680, lng: -9.9357,  emoji: '🌊', desc: 'Spektakuläre Küstenstraße' },
+  { name: 'Killarney',       lat: 52.0599, lng: -9.5044,  emoji: '🏞️', desc: 'Nationalpark & Endziel' },
 ]
-
 const routePositions = ROUTE.map(p => [p.lat, p.lng])
 
 function createColorIcon(color, emoji) {
   return L.divIcon({
-    html: `<div style="background:${color};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-size:16px">${emoji}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -20],
-    className: '',
+    html: `<div style="background:${color};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:16px">${emoji}</div>`,
+    iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20], className: '',
   })
 }
 
 function MapFitBounds() {
   const map = useMap()
-  useEffect(() => {
-    map.fitBounds(routePositions, { padding: [40, 40] })
-  }, [map])
+  useEffect(() => { map.fitBounds(routePositions, { padding: [40, 40] }) }, [map])
   return null
 }
 
 export default function Home() {
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const [participants, setParticipants] = useState([])
   const [stats, setStats] = useState({ proposals: 0, events: 0, votes: 0 })
 
   useEffect(() => {
-    fetchParticipants()
-    fetchStats()
-
-    // Realtime subscription for online status
-    const channel = supabase
-      .channel('profiles-online')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchParticipants()
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
+    fetchAll()
+    // Poll every 15 s so online status stays fresh
+    const id = setInterval(fetchAll, 15000)
+    return () => clearInterval(id)
   }, [])
 
-  async function fetchParticipants() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('name')
-    setParticipants(data || [])
-  }
-
-  async function fetchStats() {
-    const [{ count: proposals }, { count: events }, { count: votes }] = await Promise.all([
-      supabase.from('proposals').select('*', { count: 'exact', head: true }),
-      supabase.from('calendar_events').select('*', { count: 'exact', head: true }),
-      supabase.from('votes').select('*', { count: 'exact', head: true }),
-    ])
-    setStats({ proposals: proposals || 0, events: events || 0, votes: votes || 0 })
+  async function fetchAll() {
+    try {
+      const [profiles, proposals, events] = await Promise.all([
+        api.get('/api/profiles'),
+        api.get('/api/proposals'),
+        api.get('/api/events'),
+      ])
+      setParticipants(profiles)
+      const voteCount = proposals.reduce((n, p) => n + (p.votes?.length || 0), 0)
+      setStats({ proposals: proposals.length, events: events.length, votes: voteCount })
+    } catch {
+      // not logged in yet – ignore
+    }
   }
 
   const onlineCount = participants.filter(p => p.is_online).length
@@ -86,16 +69,16 @@ export default function Home() {
       <div className="bg-gradient-to-r from-ireland-green to-emerald-600 rounded-2xl p-6 text-white">
         <h1 className="text-2xl font-bold mb-1">🍀 Irland Gruppenreise 2026</h1>
         <p className="opacity-90 text-sm">Dublin → Cliffs of Moher → Galway → Ring of Kerry → Killarney</p>
-        <div className="flex gap-4 mt-4 text-sm">
-          <div className="bg-white/20 rounded-lg px-3 py-1.5">
-            <span className="font-bold">{stats.proposals}</span> Vorschläge
-          </div>
-          <div className="bg-white/20 rounded-lg px-3 py-1.5">
-            <span className="font-bold">{stats.events}</span> Events
-          </div>
-          <div className="bg-white/20 rounded-lg px-3 py-1.5">
-            <span className="font-bold">{stats.votes}</span> Stimmen
-          </div>
+        <div className="flex flex-wrap gap-3 mt-4 text-sm">
+          {[
+            { label: 'Vorschläge', value: stats.proposals },
+            { label: 'Events',     value: stats.events },
+            { label: 'Stimmen',    value: stats.votes },
+          ].map(s => (
+            <div key={s.label} className="bg-white/20 rounded-lg px-3 py-1.5">
+              <span className="font-bold">{s.value}</span> {s.label}
+            </div>
+          ))}
           <div className="bg-white/20 rounded-lg px-3 py-1.5">
             <span className="inline-block w-2 h-2 bg-green-300 rounded-full animate-pulse mr-1"></span>
             <span className="font-bold">{onlineCount}</span> online
@@ -110,34 +93,29 @@ export default function Home() {
             <div className="p-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-800">🗺️ Reiseroute</h2>
             </div>
-            <div style={{ height: '420px' }}>
+            <div style={{ height: 420 }}>
               <MapContainer
                 center={[52.8, -8.0]}
                 zoom={7}
                 style={{ height: '100%', width: '100%' }}
-                zoomControl={true}
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <MapFitBounds />
-
-                {/* Route line */}
                 <Polyline
                   positions={routePositions}
-                  color="#169B62"
-                  weight={4}
-                  opacity={0.8}
-                  dashArray="10, 5"
+                  color="#169B62" weight={4} opacity={0.8} dashArray="10,5"
                 />
-
-                {/* Waypoint markers */}
                 {ROUTE.map((stop, i) => (
                   <Marker
                     key={stop.name}
                     position={[stop.lat, stop.lng]}
-                    icon={createColorIcon(i === 0 ? '#169B62' : i === ROUTE.length - 1 ? '#FF883E' : '#3b82f6', stop.emoji)}
+                    icon={createColorIcon(
+                      i === 0 ? '#169B62' : i === ROUTE.length - 1 ? '#FF883E' : '#3b82f6',
+                      stop.emoji
+                    )}
                   >
                     <Popup>
                       <div className="text-center min-w-[140px]">
@@ -151,24 +129,23 @@ export default function Home() {
                 ))}
               </MapContainer>
             </div>
-
-            {/* Route stops */}
             <div className="p-4 border-t border-gray-100">
               <div className="flex flex-wrap gap-2">
                 {ROUTE.map((stop, i) => (
-                  <div key={stop.name} className="flex items-center gap-1">
+                  <span key={stop.name} className="flex items-center gap-1">
                     <span className="text-sm">{stop.emoji}</span>
                     <span className="text-sm font-medium text-gray-700">{stop.name}</span>
                     {i < ROUTE.length - 1 && <span className="text-gray-300 mx-1">→</span>}
-                  </div>
+                  </span>
                 ))}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Participants */}
+        {/* Sidebar */}
         <div className="space-y-4">
+          {/* Participants */}
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <h2 className="font-semibold text-gray-800 mb-4">
               👥 Teilnehmer
@@ -182,7 +159,7 @@ export default function Home() {
             {participants.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <div className="text-3xl mb-2">👋</div>
-                <p className="text-sm">Noch keine Teilnehmer angemeldet</p>
+                <p className="text-sm">Noch niemand angemeldet</p>
                 {!user && (
                   <a href="/login" className="text-ireland-green text-sm font-medium mt-2 block hover:underline">
                     Jetzt anmelden →
@@ -194,26 +171,21 @@ export default function Home() {
                 {participants.map(p => (
                   <div key={p.id} className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
-                      <img
-                        src={p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.email}&backgroundColor=b6e3f4`}
-                        alt={p.name || p.email}
-                        className="w-10 h-10 rounded-full border-2 border-gray-200 bg-gray-100"
-                        onError={e => { e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${p.name || p.email}` }}
-                      />
-                      {p.is_online && (
+                      <div className="w-10 h-10 rounded-full bg-ireland-green/20 flex items-center justify-center text-base font-bold text-ireland-green">
+                        {p.name.charAt(0).toUpperCase()}
+                      </div>
+                      {p.is_online ? (
                         <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
-                      )}
+                      ) : null}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-800 truncate">
-                        {p.name || p.email?.split('@')[0]}
-                      </div>
+                      <div className="font-medium text-sm text-gray-800 truncate">{p.name}</div>
                       <div className="text-xs text-gray-400">
-                        {p.is_online ? (
-                          <span className="text-green-600 font-medium">● Online</span>
-                        ) : p.last_seen ? (
-                          `Zuletzt aktiv: ${new Date(p.last_seen).toLocaleDateString('de-DE')}`
-                        ) : 'Offline'}
+                        {p.is_online
+                          ? <span className="text-green-600 font-medium">● Online</span>
+                          : p.last_seen
+                            ? `Zuletzt: ${new Date(p.last_seen).toLocaleDateString('de-DE')}`
+                            : 'Offline'}
                       </div>
                     </div>
                   </div>
@@ -228,8 +200,8 @@ export default function Home() {
             <div className="space-y-2">
               {[
                 { icon: '💡', label: 'Neuer Vorschlag', href: '/vorschlaege' },
-                { icon: '📅', label: 'Kalender öffnen', href: '/kalender' },
-                { icon: '🗳️', label: 'Abstimmen', href: '/abstimmung' },
+                { icon: '📅', label: 'Kalender',        href: '/kalender'    },
+                { icon: '🗳️', label: 'Abstimmen',       href: '/abstimmung'  },
               ].map(link => (
                 <a
                   key={link.href}

@@ -1,86 +1,75 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 
 const AuthContext = createContext(null)
 
+function getUserId() {
+  let id = localStorage.getItem('user_id')
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem('user_id', id)
+  }
+  return id
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
+  const [user, setUser] = useState(null)   // { id, name }
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchProfile(session.user.id)
-        await updateOnlineStatus(session.user.id, true)
-      } else {
-        setProfile(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
+    const pw   = localStorage.getItem('app_password')
+    const name = localStorage.getItem('user_name')
+    if (pw && name) {
+      const id = getUserId()
+      const u  = { id, name }
+      setUser(u)
+      api.post('/api/profiles', u).catch(() => {})
+    }
+    setLoading(false)
   }, [])
 
-  async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
-    setLoading(false)
-  }
+  // Mark offline on page close
+  useEffect(() => {
+    if (!user) return
+    const handleUnload = () => {
+      navigator.sendBeacon &&
+        navigator.sendBeacon('/api/profiles/' + user.id + '/offline')
+      // best-effort – beacon may not carry custom headers; the online
+      // indicator resets via last_seen anyway
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [user])
 
-  async function updateOnlineStatus(userId, isOnline) {
-    await supabase
-      .from('profiles')
-      .upsert({ id: userId, is_online: isOnline, last_seen: new Date().toISOString() })
-  }
+  async function login(password, name) {
+    localStorage.setItem('app_password', password)
+    // Validate password by hitting the API
+    try {
+      await api.get('/api/profiles')
+    } catch (err) {
+      localStorage.removeItem('app_password')
+      if (err.status === 401) throw new Error('Falsches Passwort')
+      throw err
+    }
 
-  async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    })
-    if (error) throw error
+    const id = getUserId()
+    localStorage.setItem('user_name', name)
+    const u = { id, name }
+    await api.post('/api/profiles', u)
+    setUser(u)
   }
 
   async function signOut() {
-    if (user) await updateOnlineStatus(user.id, false)
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    if (user) {
+      await api.patch('/api/profiles/' + user.id, { is_online: false }).catch(() => {})
+    }
+    localStorage.removeItem('app_password')
+    localStorage.removeItem('user_name')
+    setUser(null)
   }
 
-  // Update online status on page unload
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (user) {
-        navigator.sendBeacon('/api/offline', JSON.stringify({ userId: user.id }))
-        supabase.from('profiles').upsert({ id: user.id, is_online: false, last_seen: new Date().toISOString() })
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [user])
-
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, signOut, fetchProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, signOut }}>
       {children}
     </AuthContext.Provider>
   )

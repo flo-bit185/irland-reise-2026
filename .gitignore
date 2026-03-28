@@ -1,18 +1,8 @@
-# Dependencies
 node_modules/
-
-# Build output
 dist/
-
-# Environment variables (NEVER commit these!)
 .env
 .env.local
-.env.production
-
-# Vite cache
-.vite/
-
-# Editor
+data.db
+data.db-shm
+data.db-wal
 .DS_Store
-*.swp
-*.swo

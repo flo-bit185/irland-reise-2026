@@ -1,108 +1,87 @@
 # 🍀 Irland Reise 2026 – Setup-Anleitung
 
-## 1. Supabase Projekt einrichten
-
-1. Gehe zu [supabase.com](https://supabase.com) → **New Project**
-2. Name: `irland-reise-2026`
-3. Region: `eu-central-1` (Frankfurt)
-4. Warte bis das Projekt erstellt ist (~2 Min)
-
-### Datenbank einrichten
-1. Supabase Dashboard → **SQL Editor** → **New Query**
-2. Kopiere den Inhalt von `supabase/schema.sql` und füge ihn ein
-3. Klicke **Run** → Alle Tabellen werden erstellt
-
-### API-Schlüssel holen
-1. Supabase Dashboard → **Settings** → **API**
-2. Kopiere:
-   - **Project URL** → `VITE_SUPABASE_URL`
-   - **anon public** Key → `VITE_SUPABASE_ANON_KEY`
-
-### Google OAuth aktivieren
-1. Supabase Dashboard → **Authentication** → **Providers** → **Google**
-2. Aktiviere Google OAuth
-3. Gehe zur [Google Cloud Console](https://console.cloud.google.com)
-4. Erstelle ein neues Projekt (oder wähle ein bestehendes)
-5. APIs & Services → **OAuth 2.0 Client IDs** → **Web application**
-6. Authorisierte Weiterleitungs-URLs hinzufügen:
-   - `https://DEIN-PROJEKT.supabase.co/auth/v1/callback`
-   - (nach Vercel-Deploy: auch die Vercel-URL)
-7. Client ID und Client Secret in Supabase eintragen
+Kein Cloud-Konto nötig. Einfach Node.js installieren, starten, fertig.
 
 ---
 
-## 2. Lokal entwickeln
+## Lokal starten (Entwicklung)
 
 ```bash
-# Abhängigkeiten installieren
 npm install
-
-# .env Datei erstellen
-cp .env.example .env
-# Dann .env mit deinen Supabase-Werten ausfüllen
-
-# Entwicklungsserver starten
 npm run dev
-# → http://localhost:5173
 ```
+
+- Frontend: http://localhost:5173
+- API-Server: http://localhost:3001
+- Passwort: **3747xjdu**
+
+Die Datenbank (`data.db`) wird beim ersten Start automatisch angelegt.
 
 ---
 
-## 3. Auf Vercel deployen
+## Produktion (auf einem eigenen Server / VPS)
 
-### Option A: Via GitHub (empfohlen)
-1. Push dieses Repo zu GitHub
-2. Gehe zu [vercel.com](https://vercel.com) → **Add New Project**
-3. Wähle das GitHub Repo aus
-4. **Environment Variables** hinzufügen:
-   - `VITE_SUPABASE_URL` = deine Supabase URL
-   - `VITE_SUPABASE_ANON_KEY` = dein Supabase anon key
-5. Klicke **Deploy** → fertig!
-
-### Option B: Via Vercel CLI
 ```bash
-npm i -g vercel
-vercel
-# Folge den Anweisungen
-# Vergiss nicht die Environment Variables zu setzen!
+npm install
+npm run build        # React-App bauen → dist/
+npm start            # Express startet auf Port 3001 und serviert alles
 ```
 
-### Nach dem Deploy: Supabase Redirect URLs aktualisieren
-1. Supabase Dashboard → **Authentication** → **URL Configuration**
-2. **Site URL**: `https://deine-app.vercel.app`
-3. **Redirect URLs** hinzufügen: `https://deine-app.vercel.app/**`
-4. Google OAuth Redirect URL aktualisieren (in der Google Cloud Console)
+Zugriff über http://DEIN-SERVER:3001
+
+### Mit eigenem Port
+```bash
+PORT=8080 npm start
+```
+
+### Passwort ändern
+```bash
+APP_PASSWORD=neuesPasswort npm start
+```
+
+Oder eine `.env`-Datei anlegen (Kopie von `.env.example`).
 
 ---
 
-## 4. Teilnehmer hinzufügen
+## Kostenloses Cloud-Hosting (ohne Vercel)
 
-Einfach den App-Link teilen! Jeder kann sich mit Google anmelden und wird automatisch zur Teilnehmerliste hinzugefügt.
+### Option A – Railway
+1. https://railway.app → New Project → GitHub Repo importieren
+2. Environment Variable setzen: `APP_PASSWORD=3747xjdu`
+3. Deploy → Railway gibt dir eine URL
+
+### Option B – Render
+1. https://render.com → New Web Service → GitHub Repo
+2. Build Command: `npm install && npm run build`
+3. Start Command: `npm start`
+4. Environment Variable: `APP_PASSWORD=3747xjdu`
+5. Deploy → Render gibt dir eine URL
+
+### Option C – Fly.io
+```bash
+npm install -g flyctl
+fly launch
+fly deploy
+```
 
 ---
 
-## Technologie-Stack
+## App-Funktionen
 
-| Layer | Technologie |
-|-------|-------------|
-| Frontend | React 18 + Vite |
-| Styling | Tailwind CSS v3 |
-| Routing | React Router v6 |
-| Karte | Leaflet + React-Leaflet |
-| Kalender | FullCalendar v6 |
-| Backend | Supabase (PostgreSQL + Auth + Realtime) |
-| Deploy | Vercel |
-| Login | Google OAuth via Supabase |
+| Feature          | Details |
+|------------------|---------|
+| 🔑 Login          | Gruppen-Passwort + dein Name |
+| 🗺️ Karte          | Leaflet mit Dublin→Killarney-Route |
+| 💡 Vorschläge     | Erstellen, kategorisieren, voten |
+| 📅 Kalender       | FullCalendar, Drag & Drop |
+| 🗳️ Abstimmung     | Live-Ranking mit Fortschrittsbalken |
+| 👥 Teilnehmer     | Online-Status (automatisch) |
+| 🔄 Realtime       | Polling alle 10–15 Sekunden |
 
----
+## Daten-Sicherung
 
-## Features
+Die SQLite-Datei `data.db` enthält alle Daten. Einfach kopieren zum Sichern.
 
-- 🗺️ **Interaktive Karte** mit Irland-Reiseroute (Leaflet)
-- 👥 **Teilnehmer-Übersicht** mit Online-Status in Echtzeit
-- 💡 **Vorschläge** – Attraktionen/Restaurants vorschlagen mit Kategorien & Votes
-- 📅 **Kalender** – FullCalendar mit Drag & Drop, Farbcodierung, Teilnehmer-Zuordnung
-- 🗳️ **Abstimmung** – Upvote/Downvote mit Live-Ranking und Fortschrittsbalken
-- 🔐 **Google OAuth** Login
-- ⚡ **Realtime** – Alle Updates sofort für alle sichtbar
-- 📱 **Mobile-first** responsive Design
+```bash
+cp data.db data.db.backup
+```
